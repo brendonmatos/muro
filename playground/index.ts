@@ -23,8 +23,9 @@ const db = drizzle({ client: new Database('bun.db') });
 type ObjectLike = { [key: string]: any }
 
 type LayerSettings<TInput extends z.ZodTypeAny, TOutput extends ObjectLike> = {
+  meta?: ObjectLike,
   input: TInput,
-  resolver: (ctx: { input: z.infer<TInput> }) => PromiseLike<TOutput>
+  resolver: (ctx: Context<z.infer<TInput>, TOutput>) => PromiseLike<TOutput>
 }
 
 class LayerQueryPromise<T> implements Promise<T> {
@@ -59,20 +60,34 @@ class LayerQueryPromise<T> implements Promise<T> {
 	}
 }
 
-class Context {
-  input = {}
-  settings = {
-    include: {}
-  }
+type Context<TInput extends ObjectLike, TOutput extends ObjectLike> = {
+  include: TOutput
+  input: TInput
+}
 
+class ContextBuilder<TInput extends ObjectLike, TOutput extends ObjectLike> {
+  include: TOutput | undefined
+  input: TInput | undefined
 
   constructor() {
   }
 
   addInclude(include: any) {
-    this.settings.include = {
-      ...this.settings.include,
-      ...include,
+    this.include = include
+  }
+
+  addInput(input: any) {
+    this.input = input
+  }
+
+  get(): Context<TInput, TOutput> {
+    if (!this.include || !this.input) {
+      throw new Error('Include or input is not set')
+    }
+
+    return {
+      include: this.include,
+      input: this.input,
     }
   }
 }
@@ -132,29 +147,29 @@ type IncludeRecursive<T extends any> =
   never
 
 const defineLayer = <TInput extends z.ZodTypeAny, TOutput extends ObjectLike>(settings: LayerSettings<TInput, TOutput>) => {
+
+  
   type Input = z.infer<typeof settings.input>
+
+  const ctx = new ContextBuilder<Input, ResolverResult>()
+  type LayerContext = Context<Input, ResolverResult>
   type ResolverResult = Awaited<ReturnType<typeof settings.resolver>>
-  type ResolveInput = Input | ((ctx: Context) => Input)
+  type ResolveInput = Input | ((ctx: LayerContext) => Input)
   type Include = IncludeRecursive<ResolverResult>
   
-  const ctx = new Context() 
-
+  
   const layer = {
-    withInclude: (include: Include) => {
+    withInput: (resolveInput: ResolveInput, include: Include = {} as Include) => { 
       ctx.addInclude(include)
-      return layer
-    },
-    withInput: (resolveInput: ResolveInput, include: Include = {} as Include) => {
-
-      ctx.addInclude(include)
-
+      
       // @ts-ignore
       const resolvedInput = typeof resolveInput === 'function' ? resolveInput(ctx) : resolveInput
-
+      ctx.addInput(resolvedInput)
+      
       const queryPromise = new LayerQueryPromise<ResolverResult>(async () => {
-        const parsedInput = settings.input.parse(resolvedInput)
-        const result = await settings.resolver({ input: parsedInput })
-        const resultObject = await resolveWithInclude(result, ctx.settings.include)
+        console.log(ctx.get())
+        const result = await settings.resolver(ctx.get())
+        const resultObject = await resolveWithInclude(result, ctx.include)
         return resultObject
       })
 
@@ -166,6 +181,7 @@ const defineLayer = <TInput extends z.ZodTypeAny, TOutput extends ObjectLike>(se
 }
 
 const person = defineLayer({
+  meta: {},
   input: z.object({
     id: z.string(),
   }),
@@ -186,6 +202,7 @@ const person = defineLayer({
 });
 
 const post = defineLayer({
+  meta: {},
   input: z.object({
     id: z.string(),
   }),
