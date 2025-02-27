@@ -125,6 +125,40 @@ type IncludeRecursive<T extends any> =
   T extends boolean ?
     boolean :
   never
+ 
+type ItShouldSelect<TInclude extends any, TOutput extends any, TInferValue extends any = any> = 
+  TOutput extends PromiseLike<TInferValue> | LayerQueryPromise<TInferValue> ?
+    TInclude extends true | ObjectLike ? true : false 
+    :
+  TOutput extends string | number | boolean | ObjectLike ?
+    TInclude extends false ? false : true
+    :
+  false
+
+type SelectedResult<TInclude extends any, TOutput extends any> = 
+  TOutput extends ObjectLike ?
+    {
+      [K in keyof TOutput as (
+        K extends keyof TInclude ? 
+          // For Promise/LayerQueryPromise, only include if TInclude[K] is true or object
+          TOutput[K] extends PromiseLike<any> | LayerQueryPromise<any> ?
+            TInclude[K] extends true | ObjectLike ? K : never
+            :
+          // For regular props, include unless explicitly false
+          TInclude[K] extends false ? never : K
+          :
+        // For props not in TInclude, include unless it's a Promise/LayerQueryPromise
+        TOutput[K] extends PromiseLike<any> | LayerQueryPromise<any> ? never : K
+      )]: 
+        TOutput[K]
+    } :
+  ItShouldSelect<TInclude, TOutput, any> extends true ?
+    TOutput :
+    never 
+    
+  
+
+type Hello = SelectedResult<{ pessoa: true }, { id: number, pessoa: LayerQueryPromise<{ nome: string }> }>
 
 export const defineLayer = <
   TInput extends z.ZodTypeAny, 
@@ -140,10 +174,9 @@ export const defineLayer = <
   type ResolverResult = Awaited<ReturnType<typeof settings.resolver>>
   type ResolveInput = Input | ((ctx: LayerContext) => Input)
   type Include = IncludeRecursive<ResolverResult>
-  
-  
+
   const layer = {
-    withInput: (resolveInput: ResolveInput, include = {} as Include) => { 
+    withInput: <TInclude extends Include>(resolveInput: ResolveInput, include: TInclude = {} as TInclude) => { 
       // console.log(settings.meta, resolveInput, include)
 
       ctx.addInclude(include)
@@ -159,7 +192,7 @@ export const defineLayer = <
         return resultObject
       })
 
-      return queryPromise
+      return queryPromise as unknown as SelectedResult<TInclude, ResolverResult>
     }
   }
 

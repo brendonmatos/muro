@@ -123,14 +123,40 @@ const posts = defineLayer({
   },
 });
 
-const result = await posts.withInput({
-  userId: '1',
-}, {
-  items: {
-    authorUserId: true,
-    details: {
+const test = defineLayer({
+  meta: {
+    name: 'test',
+  },
+  input: z.object({
+    id: z.string(),
+  }),
+  resolver: async (ctx) => {
+    return {
+      id: ctx.include.id,
+      hello: 'world',
+      ola: 'mundo',
+      ciao: 'mondo',
     }
-  }
+  },
+});
+
+const result = await test.withInput({
+  id: '1',
+}, {
+  hello: false,
 })
 
 console.dir(result, { depth: null })
+
+// const result = await posts.withInput({
+//   userId: '1',
+// }, {
+//   items: {
+//     authorUserId: true,
+//     details: false
+//   }
+// })
+
+// console.dir(result, { depth: null })
+
+// result.items[0].details
