@@ -5,13 +5,21 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 import { Database } from 'bun:sqlite';
 import { z } from "zod";
 
-const userTable = sqliteTable('user', {
+const optionalBasedOnInclude = <T extends ObjectLike>(include: any, object: T) => {
+  return Object.fromEntries(
+    Object
+      .entries(object)
+      .filter(([key, value]) => include[key] !== false)
+  ) as Partial<T>
+}
+
+export const userTable = sqliteTable('user', {
 	id: text().primaryKey().$defaultFn(() => crypto.randomUUID()),
 	name: text(),
 	age: integer(),
 });
 
-const postTable = sqliteTable('post', {
+export const postTable = sqliteTable('post', {
 	id: text().primaryKey().$defaultFn(() => crypto.randomUUID()),
 	userId: text(),
   title: text(),
@@ -44,15 +52,7 @@ const person = defineLayer({
   },
 });
 
-type ObjectLike = { [key: string]: any }
 
-const optionalBasedOnInclude = <T extends ObjectLike>(include: any, object: T) => {
-  return Object.fromEntries(
-    Object
-      .entries(object)
-      .filter(([key, value]) => include[key] !== false)
-  ) as Partial<T>
-}
 
 const post = defineLayer({
   meta: {
@@ -105,9 +105,7 @@ const posts = defineLayer({
     if (offset) {
       query.offset(offset);
     }
-    const resultPosts = await query;
-
-    console.log(resultPosts)
+    const resultPosts = await query
 
     return {
       count: resultPosts.length,
@@ -123,40 +121,13 @@ const posts = defineLayer({
   },
 });
 
-const test = defineLayer({
-  meta: {
-    name: 'test',
-  },
-  input: z.object({
-    id: z.string(),
-  }),
-  resolver: async (ctx) => {
-    return {
-      id: ctx.include.id,
-      hello: 'world',
-      ola: 'mundo',
-      ciao: 'mondo',
-    }
-  },
-});
-
-const result = await test.withInput({
-  id: '1',
+const result = await posts.withInput({
+  userId: '1',
 }, {
-  hello: false,
+  items: {
+    authorUserId: true,
+    details: true
+  }
 })
 
 console.dir(result, { depth: null })
-
-// const result = await posts.withInput({
-//   userId: '1',
-// }, {
-//   items: {
-//     authorUserId: true,
-//     details: false
-//   }
-// })
-
-// console.dir(result, { depth: null })
-
-// result.items[0].details

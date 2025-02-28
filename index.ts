@@ -60,7 +60,7 @@ class ContextBuilder<TInput extends ObjectLike, TIncludeOptions extends ObjectLi
     this.input = input
   }
 
-  get(): Context<TInput, TOutput> {
+  get(): Context<TInput, TIncludeOptions> {
     if (!this.include || !this.input) {
       throw new Error('Include or input is not set')
     }
@@ -109,64 +109,63 @@ const resolveWithInclude = async (currentContent: any, include: any): Promise<an
 }
 
 
-type IncludeRecursive<T extends any> = 
-  T extends Array<infer U> ?
-    IncludeRecursive<U> | false : 
-  T extends LayerQueryPromise<infer U> ?
-    IncludeRecursive<U> :
-  T extends ObjectLike ?
-    {[key in keyof T]?: boolean | IncludeRecursive<T[key]> | undefined}: 
-  T extends PromiseLike<infer U> ?
-    IncludeRecursive<U> :
-  T extends string ?
-    boolean :
-  T extends number ?
-    boolean :
-  T extends boolean ?
-    boolean :
+type ArrayIncludeOption<U> = IncludeRecursive<U> | false
+type LayerQueryIncludeOption<U> = IncludeRecursive<U>
+type ObjectIncludeOption<T> = {[key in keyof T]?: boolean | IncludeRecursive<T[key]>}
+type PromiseIncludeOption<U> = IncludeRecursive<U>
+type PrimitiveIncludeOption = boolean
+
+type IncludeRecursive<T> = 
+  T extends Array<infer U> ? ArrayIncludeOption<U> : 
+  T extends LayerQueryPromise<infer U> ? LayerQueryIncludeOption<U> :
+  T extends ObjectLike ? ObjectIncludeOption<T> : 
+  T extends PromiseLike<infer U> ? PromiseIncludeOption<U> :
+  T extends string | number | boolean ? PrimitiveIncludeOption :
   never
  
-type ItShouldSelect<TInclude extends any, TOutput extends any, TInferValue extends any = any> = 
-  TOutput extends PromiseLike<TInferValue> | LayerQueryPromise<TInferValue> ?
-    TInclude extends true | ObjectLike ? true : false 
-    :
+type PromiseSelectionRule<TInclude, TInferValue> = 
+  TInclude extends true | ObjectLike ? true : false
+
+type RegularTypeSelectionRule<TInclude> =
+  TInclude extends false ? false : true
+
+type ItShouldSelect<TInclude, TOutput, TInferValue = any> = 
+  TOutput extends PromiseLike<TInferValue> | LayerQueryPromise<TInferValue> ? 
+    PromiseSelectionRule<TInclude, TInferValue> : 
   TOutput extends string | number | boolean | ObjectLike ?
-    TInclude extends false ? false : true
-    :
+    RegularTypeSelectionRule<TInclude> :
   false
 
-type SelectedResult<TInclude extends any, TOutput extends any> = 
-  TOutput extends ObjectLike ?
-    {
-      [K in keyof TOutput as (
-        K extends keyof TInclude ? 
-          // For Promise/LayerQueryPromise, only include if TInclude[K] is true or object
-          TOutput[K] extends PromiseLike<any> | LayerQueryPromise<any> ?
-            TInclude[K] extends true | ObjectLike ? K : never
-            :
-          // For regular props, include unless explicitly false
-          TInclude[K] extends false ? never : K
-          :
-        // For props not in TInclude, include unless it's a Promise/LayerQueryPromise
-        TOutput[K] extends PromiseLike<any> | LayerQueryPromise<any> ? never : K
-      )]: 
-        TOutput[K]
-    } :
-  ItShouldSelect<TInclude, TOutput, any> extends true ?
-    TOutput :
-    never 
+type KeyInIncludeAsync<K extends keyof any, TOutput, TInclude> = 
+  TOutput extends PromiseLike<any> | LayerQueryPromise<any> ?
+    TInclude extends true | ObjectLike ? K : never :
+  TInclude extends false ? never : K
+
+type KeyNotInInclude<K extends keyof any, TOutput> = 
+  TOutput extends PromiseLike<any> | LayerQueryPromise<any> ? never : K
+
+type KeySelector<K extends keyof TOutput, TInclude, TOutput> = 
+  K extends keyof TInclude ? 
+    KeyInIncludeAsync<K, TOutput[K], TInclude[K]> : 
+    KeyNotInInclude<K, TOutput[K]>
+
+type SelectedObjectResult<TInclude, TOutput extends ObjectLike> = {
+  [K in keyof TOutput as KeySelector<K, TInclude, TOutput>]: TOutput[K]
+}
+
+type SelectedResult<TInclude, TOutput> = 
+  TOutput extends ObjectLike ? 
+    SelectedObjectResult<TInclude, TOutput> : 
+  ItShouldSelect<TInclude, TOutput> extends true ? 
+    TOutput : 
+    never
     
-  
-
-type Hello = SelectedResult<{ pessoa: true }, { id: number, pessoa: LayerQueryPromise<{ nome: string }> }>
-
 export const defineLayer = <
   TInput extends z.ZodTypeAny, 
   TOutput extends ObjectLike
 >
   (settings: LayerSettings<TInput, TOutput>) => {
 
-  
   type Input = z.infer<typeof settings.input>
 
   const ctx = new ContextBuilder<Input, ResolverResult>()
@@ -177,7 +176,6 @@ export const defineLayer = <
 
   const layer = {
     withInput: <TInclude extends Include>(resolveInput: ResolveInput, include: TInclude = {} as TInclude) => { 
-      // console.log(settings.meta, resolveInput, include)
 
       ctx.addInclude(include)
 
@@ -186,7 +184,6 @@ export const defineLayer = <
       ctx.addInput(resolvedInput)
       
       const queryPromise = new LayerQueryPromise<ResolverResult>(async () => {
-        console.log(ctx.get())
         const result = await settings.resolver(ctx.get())
         const resultObject = await resolveWithInclude(result, ctx.include)
         return resultObject
@@ -199,3 +196,79 @@ export const defineLayer = <
   return layer
 }
 
+
+type Serializable = string | number | { [key: string]: Serializable } | boolean | null | undefined | Serializable[]
+
+type PromiseTrigger = () => Promise<any>
+
+
+function ControllablePromise<T>() {
+  const exposed: {
+    resolve: (value: T) => void
+    reject: (reason: any) => void
+  } = {
+    resolve: () => {},
+    reject: () => {},
+  } 
+
+  const pure = new Promise<T>((resolve, reject) => {
+    exposed.resolve = resolve
+    exposed.reject = reject
+  })
+
+  // @ts-ignore
+  pure.reject = exposed.reject
+  // @ts-ignore
+  pure.resolve = exposed.resolve
+
+  return pure as unknown as Promise<T> & typeof exposed
+}
+
+export class PromiseBatch {
+
+  private running = 0;
+  private queue: PromiseTrigger[] = [];
+  private promises = new Map<string, Promise<any>>();
+
+  constructor(private readonly concurrency: number) {
+  }
+ 
+  resolve<T>(identifier: Serializable, task: PromiseTrigger) {
+
+    const identifierString = JSON.stringify(identifier)
+
+    if (this.promises.has(identifierString)) {
+      return this.promises.get(identifierString) as Promise<T>;
+    }
+    
+    const promise = ControllablePromise<T>()
+    this.promises.set(identifierString, promise);
+    
+    this.queue.push(() => {
+      return task().then(promise.resolve).catch(promise.reject)
+    })
+
+    this.tick()
+
+    return promise;
+  }
+
+  private async tick() {
+    if (this.running >= this.concurrency) {
+      return
+    }
+    
+    const task = this.queue.shift()
+    if (!task) {
+      return
+    }
+
+    this.running++
+    await task()
+    this.running--
+
+    if (this.queue.length > 0) {
+      this.tick()
+    }
+  }
+}
