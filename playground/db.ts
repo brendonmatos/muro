@@ -11,8 +11,11 @@ const optionalBasedOnInclude = <T extends ObjectLike>(
   include: any,
   object: T,
 ) => {
+  if (!include) {
+    return object;
+  }
   return Object.fromEntries(
-    Object.entries(object).filter(([key, value]) => include[key] !== false),
+    Object.entries(object).filter(([key]) => include[key] !== false),
   ) as Partial<T>;
 };
 

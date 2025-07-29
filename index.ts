@@ -65,21 +65,21 @@ class ContextBuilder<
 
   constructor() {}
 
-  addInclude(include: any) {
+  addInclude(include: TIncludeOptions | undefined) {
     this.include = include;
   }
 
-  addInput(input: any) {
+  addInput(input: TInput) {
     this.input = input;
   }
 
   get(): Context<TInput, TIncludeOptions> {
-    if (!this.include || !this.input) {
-      throw new Error("Include or input is not set");
+    if (this.input === undefined) {
+      throw new Error("Input is not set");
     }
 
     return {
-      include: this.include,
+      include: this.include as TIncludeOptions,
       input: this.input,
     };
   }
@@ -214,12 +214,12 @@ export const defineLayer = <
   settings: LayerSettings<TInput, TOutput>,
 ) => {
   type Input = z.infer<typeof settings.input>;
-
-  const ctx = new ContextBuilder<Input, ResolverResult>();
-  type LayerContext = Context<Input, ResolverResult>;
   type ResolverResult = Awaited<ReturnType<typeof settings.resolver>>;
+  type Include = IncludeRecursive<ResolverResult> | boolean | undefined | ObjectLike;
+  
+  const ctx = new ContextBuilder<Input, Include>();
+  type LayerContext = Context<Input, Include>;
   type ResolveInput = Input | ((ctx: LayerContext) => Input);
-  type Include = IncludeRecursive<ResolverResult> | boolean | undefined;
 
   const layer = {
     resolveWithInclude: async (
@@ -286,7 +286,7 @@ export const defineLayer = <
       resolveInput: ResolveInput,
       include?: TInclude,
     ) => {
-      ctx.addInclude(include || {});
+      ctx.addInclude(include);
 
       const resolvedInput =
         // @ts-ignore
@@ -298,7 +298,7 @@ export const defineLayer = <
         const result = await settings.resolver(ctx.get());
         const resultObject = await layer.resolveWithInclude(
           result,
-          ctx.include,
+          ctx.include ?? {},
         );
         return resultObject;
       });
