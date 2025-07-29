@@ -1,6 +1,7 @@
-import { PromiseBatch } from "./index";
+import { PromiseBatch, defineLayer } from "./index";
 import { describe, expect, it, mock } from "bun:test";
 import { setTimeout } from "node:timers/promises";
+import { z } from "zod";
 
 
 class Parallel {
@@ -87,3 +88,112 @@ it("should reject if the promise is rejected", async () => {
   await expect(batch.resolve('1', fn)).rejects.toThrow('Hello')
   expect(fn).toHaveBeenCalledTimes(1)
 })
+
+describe("defineLayer include system", () => {
+  const person = defineLayer({
+    input: z.object({
+      id: z.string(),
+    }),
+    resolver: async (ctx) => {
+      return {
+        name: "John Doe",
+        age: 20,
+        email: "john@example.com",
+      };
+    },
+  });
+
+  const book = defineLayer({
+    input: z.object({
+      id: z.string(),
+    }),
+    resolver: async (ctx) => {
+      return {
+        title: "The Great Gatsby",
+        pages: 180,
+        author: person.withInput({ id: "1" }),
+      };
+    },
+  });
+
+  it("should exclude promises when no include is specified", async () => {
+    const result = await book.withInput({ id: "1" });
+    
+    expect(result).toEqual({
+      title: "The Great Gatsby",
+      pages: 180,
+    } as any);
+    expect(result as any).not.toHaveProperty("author");
+  });
+
+  it("should include all fields when promise field is included with true", async () => {
+    const result = await book.withInput({ id: "1" }, {
+      title: true,
+      pages: true,
+      author: true,
+    } as any);
+    
+    expect(result).toEqual({
+      title: "The Great Gatsby",
+      pages: 180,
+      author: {
+        name: "John Doe",
+        age: 20,
+        email: "john@example.com",
+      },
+    } as any);
+  });
+
+  it("should selectively include/exclude fields with object include", async () => {
+    const result = await book.withInput({ id: "1" }, {
+      title: true,
+      pages: false,
+      author: {
+        name: true,
+        age: false,
+      },
+    } as any);
+    
+    expect(result).toEqual({
+      title: "The Great Gatsby",
+      author: {
+        name: "John Doe",
+        email: "john@example.com",
+      },
+    } as any);
+    expect(result.author as any).not.toHaveProperty("age");
+    expect(result as any).not.toHaveProperty("pages");
+  });
+
+  it("should exclude fields marked as false", async () => {
+    const result = await book.withInput({ id: "1" }, {
+      title: true,
+      pages: false,
+      author: true,
+    } as any);
+    
+    expect(result).toEqual({
+      title: "The Great Gatsby",
+      author: {
+        name: "John Doe",
+        age: 20,
+        email: "john@example.com",
+      },
+    } as any);
+    expect(result as any).not.toHaveProperty("pages");
+  });
+
+  it("should completely exclude promise fields when marked as false", async () => {
+    const result = await book.withInput({ id: "1" }, {
+      title: true,
+      pages: true,
+      author: false,
+    } as any);
+    
+    expect(result).toEqual({
+      title: "The Great Gatsby",
+      pages: 180,
+    } as any);
+    expect(result as any).not.toHaveProperty("author");
+  });
+});

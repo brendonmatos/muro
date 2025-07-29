@@ -219,13 +219,13 @@ export const defineLayer = <
   type LayerContext = Context<Input, ResolverResult>;
   type ResolverResult = Awaited<ReturnType<typeof settings.resolver>>;
   type ResolveInput = Input | ((ctx: LayerContext) => Input);
-  type Include = IncludeRecursive<ResolverResult>;
+  type Include = IncludeRecursive<ResolverResult> | boolean | undefined;
 
   const layer = {
     resolveWithInclude: async (
       result: ObjectLike,
       includeSettings: Include,
-    ) => {
+    ): Promise<any> => {
       const includeIsTruthy = includeSettings != false;
       const includeIsTrue = includeSettings === true;
       const resultIsObject = typeof result === "object";
