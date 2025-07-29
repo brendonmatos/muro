@@ -30,6 +30,8 @@ const book = defineLayer({
   },
 });
 
-const result = await book.withInput({ id: "1" });
+const result = await book.withInput({ id: "1" }, { 
+  author: true 
+});
 
 console.dir(result, { depth: null });

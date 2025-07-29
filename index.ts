@@ -1,5 +1,4 @@
 import z from "zod";
-import pino from "pino";
 
 type ObjectLike = { [key: string]: any };
 
@@ -238,14 +237,18 @@ export const defineLayer = <
         return undefined;
       }
 
-      if (resultIsPromiseLike && includeIsTrue) {
-        return layer.resolveWithInclude(await result, settings);
+      if (resultIsPromiseLike) {
+        if (includeIsTrue) {
+          return layer.resolveWithInclude(await result, true);
+        } else if (typeof includeSettings === 'object' && includeSettings !== null) {
+          return layer.resolveWithInclude(await result, includeSettings);
+        }
       }
 
       if (resultIsArray && includeIsTruthy) {
         return Promise.all(
           result.map((item) => {
-            return layer.resolveWithInclude(item, settings);
+            return layer.resolveWithInclude(item, includeSettings);
           }),
         );
       }
@@ -254,8 +257,25 @@ export const defineLayer = <
         for (const key in result) {
           const value = result[key];
           // @ts-ignore
-          const include = settings?.[key];
-          result[key] = await layer.resolveWithInclude(value, include);
+          const include = includeSettings?.[key];
+          
+          // If include is undefined for this key, include primitives but exclude promises
+          if (include === undefined) {
+            const isPromiseLike = value instanceof Promise || value instanceof LayerQueryPromise;
+            if (isPromiseLike) {
+              delete result[key]; // Exclude promises when not explicitly included
+              continue;
+            }
+            // Keep primitives as-is
+            continue;
+          }
+          
+          const resolvedValue = await layer.resolveWithInclude(value, include);
+          if (resolvedValue === undefined) {
+            delete result[key];
+          } else {
+            result[key] = resolvedValue;
+          }
         }
       }
 
@@ -264,9 +284,9 @@ export const defineLayer = <
 
     withInput: <TInclude extends Include>(
       resolveInput: ResolveInput,
-      include: TInclude = {} as TInclude,
+      include?: TInclude,
     ) => {
-      ctx.addInclude(include);
+      ctx.addInclude(include || {});
 
       const resolvedInput =
         // @ts-ignore

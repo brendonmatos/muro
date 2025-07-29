@@ -10,7 +10,6 @@
   },
   "dependencies": {
     "drizzle-kit": "^0.30.4",
-    "pino": "^9.7.0",
     "zod": "^3.24.2"
   }
 }
