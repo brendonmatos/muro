@@ -2,12 +2,17 @@ import z from "zod";
 
 type ObjectLike = { [key: string]: any };
 
+export type PromiseResolver = <T>(
+  tasks: Array<() => Promise<T>>,
+) => Promise<T[]>;
+
 type LayerSettings<TInput extends z.ZodTypeAny, TOutput extends ObjectLike> = {
   meta?: ObjectLike;
   input: TInput;
   resolver: (
     ctx: Context<z.infer<TInput>, ObjectLike>,
   ) => PromiseLike<TOutput> | TOutput;
+  resolvePromises?: PromiseResolver;
 };
 
 class LayerQueryPromise<T> implements Promise<T> {
@@ -51,14 +56,14 @@ class LayerQueryPromise<T> implements Promise<T> {
   }
 }
 
-type Context<TInput extends ObjectLike, TIncludeOptions extends ObjectLike> = {
+type Context<TInput extends ObjectLike, TIncludeOptions> = {
   include: TIncludeOptions;
   input: TInput;
 };
 
 class ContextBuilder<
   TInput extends ObjectLike,
-  TIncludeOptions extends ObjectLike,
+  TIncludeOptions,
 > {
   include: TIncludeOptions | undefined;
   input: TInput | undefined;
@@ -246,11 +251,15 @@ export const defineLayer = <
       }
 
       if (resultIsArray && includeIsTruthy) {
-        return Promise.all(
-          result.map((item) => {
-            return layer.resolveWithInclude(item, includeSettings);
-          }),
-        );
+        const tasks = result.map((item) => {
+          return () => layer.resolveWithInclude(item, includeSettings);
+        });
+
+        if (settings.resolvePromises) {
+          return settings.resolvePromises(tasks);
+        }
+
+        return Promise.all(tasks.map((t) => t()));
       }
 
       if (resultIsObject && includeIsTruthy) {
@@ -295,7 +304,9 @@ export const defineLayer = <
       ctx.addInput(resolvedInput);
 
       const queryPromise = new LayerQueryPromise<ResolverResult>(async () => {
-        const result = await settings.resolver(ctx.get());
+        const result = await settings.resolver(
+          ctx.get() as Context<Input, ObjectLike>,
+        );
         const resultObject = await layer.resolveWithInclude(
           result,
           ctx.include ?? {},
@@ -390,3 +401,12 @@ export class PromiseBatch {
     }
   }
 }
+
+export const createPoolResolver = (limit: number): PromiseResolver => {
+  const batch = new PromiseBatch(limit);
+  return async <T>(tasks: Array<() => Promise<T>>): Promise<T[]> => {
+    return Promise.all(
+      tasks.map((task, index) => batch.resolve(index, task)),
+    ) as Promise<T[]>;
+  };
+};
