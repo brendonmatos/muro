@@ -5,10 +5,29 @@ const person = defineLayer({
   input: z.object({
     id: z.string(),
   }),
-  resolver: async (input) => {
+  resolver: async ({ input }) => {
     return {
+      id: input.id,
       name: "John Doe",
       age: 20,
+      books: books.withInput({ id: input.id }),
+    };
+  },
+});
+
+const books = defineLayer({
+  input: z.object({
+    id: z.string(),
+  }),
+  resolver: async ({ input }) => {
+    return {
+      items: [
+        {
+          id: "1",
+          title: "The Great Gatsby",
+          authorPersonId: "1",
+        }
+      ],
     };
   },
 });
@@ -27,11 +46,13 @@ const book = defineLayer({
       title: "The Great Gatsby",
       author: person.withInput({ id: bookData.authorPersonId }),
     };
-  },
+  }
 });
 
 const result = await book.withInput({ id: "1" }, { 
-  author: true 
+  author: {
+    books: true
+  } 
 });
 
-console.dir(result, { depth: null });
+console.dir(result.author, { depth: null });

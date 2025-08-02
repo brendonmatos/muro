@@ -85,55 +85,6 @@ class ContextBuilder<
   }
 }
 
-// const resolveWithInclude = async (
-//   currentContent: any,
-//   include: any,
-// ): Promise<any> => {
-//   const isArray = Array.isArray(currentContent);
-//   const isObject =
-//     typeof currentContent === "object" && currentContent !== null;
-//   const isPromise = currentContent instanceof LayerQueryPromise;
-
-//   console.log({
-//     isArray,
-//     isObject,
-//     isPromise,
-//     currentContent,
-//     include,
-//   });
-
-//   if (isArray) {
-//     return await Promise.all(
-//       currentContent.map((item: any) => resolveWithInclude(item, include)),
-//     );
-//   }
-
-//   if (isObject) {
-//     const resultObject: any = {};
-//     for (const key in currentContent) {
-//       if (!include) {
-//         continue;
-//       }
-
-//       const includeKey = include[key];
-//       const content = currentContent[key];
-
-//       const isEnabled = includeKey !== false;
-
-//       if (!isEnabled) {
-//         continue;
-//       }
-
-//       const resolvedContent = await content;
-//       resultObject[key] = await resolveWithInclude(resolvedContent, includeKey);
-//     }
-
-//     return resultObject;
-//   }
-
-//   return currentContent;
-// };
-
 type ArrayIncludeOption<U> = IncludeRecursive<U> | false;
 type LayerQueryIncludeOption<U> = IncludeRecursive<U>;
 type ObjectIncludeOption<T> = {
