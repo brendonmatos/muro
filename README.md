@@ -13,14 +13,16 @@ concurrent asynchronous tasks.
 
 - **defineLayer** – create strongly typed resolvers with input validation.
 - **Include system** – choose fields to include/exclude, with nested selection.
-- **PromiseBatch** – limit concurrency and deduplicate identical requests.
+ - **PromiseBatch** – limit concurrency and deduplicate identical requests.
+ - **createPoolResolver** – configure how arrays of promises are resolved,
+   e.g. limiting concurrency.
 - **Playground** – sample scripts showing usage with a SQLite database via
   Drizzle ORM.
 
 ## Example
 
 ```ts
-import { defineLayer } from "muro";
+import { defineLayer, createPoolResolver } from "muro";
 import { z } from "zod";
 
 const person = defineLayer({
@@ -37,6 +39,8 @@ const book = defineLayer({
     title: "The Great Gatsby",
     author: person.withInput({ id: "1" }),
   }),
+  // Limit resolving nested promises to 4 at a time
+  resolvePromises: createPoolResolver(4),
 });
 
 // Only include the nested author object when requested

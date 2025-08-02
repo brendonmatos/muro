@@ -1,4 +1,4 @@
-import { PromiseBatch, defineLayer } from "./index";
+import { PromiseBatch, defineLayer, createPoolResolver } from "./index";
 import { describe, expect, it, mock } from "bun:test";
 import { setTimeout } from "node:timers/promises";
 import { z } from "zod";
@@ -87,6 +87,33 @@ it("should reject if the promise is rejected", async () => {
 
   await expect(batch.resolve('1', fn)).rejects.toThrow('Hello')
   expect(fn).toHaveBeenCalledTimes(1)
+})
+
+it("should resolve promises using a configurable pool", async () => {
+  const parallel = new Parallel()
+
+  const item = defineLayer({
+    input: z.object({ id: z.number() }),
+    resolver: async () => {
+      parallel.increase(1)
+      await setTimeout(100)
+      parallel.decrease(1)
+      return 'ok'
+    },
+  })
+
+  const list = defineLayer({
+    input: z.object({ count: z.number() }),
+    resolver: async (ctx) => ({
+      items: Array.from({ length: ctx.input.count }, (_, i) =>
+        item.withInput({ id: i }),
+      ),
+    }),
+    resolvePromises: createPoolResolver(4),
+  })
+
+  await list.withInput({ count: 10 }, { items: true } as any)
+  expect(parallel.max).toBe(4)
 })
 
 describe("defineLayer include system", () => {
