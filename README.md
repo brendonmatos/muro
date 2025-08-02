@@ -1,6 +1,7 @@
 # Muro
-
+GraphQL for the Back-end. Fully customizable ORM that can be resolved to anything.
 Muro is a small TypeScript library for building composable data fetching layers.
+
 Layers validate their input using **zod** and allow callers to select which
 fields to resolve via an "include" object. Promises are only awaited when the
 corresponding field is explicitly included, letting applications avoid unneeded
